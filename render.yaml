@@ -1,14 +1,41 @@
+# Render 部署配置（bilibili-comment-target-backend）
+# 部署流程：
+#   1. 将 backend/ 目录推送到 GitHub 仓库
+#   2. Render → New → Web Service → 连接该仓库
+#   3. Build Command: npm install
+#   4. Start Command: npm start
+#   5. 在 Environment 中设置 FRONTEND_URL（见下方说明）
+#   6. 部署完成后访问 https://<服务名>.onrender.com/health 验证
 services:
   - type: web
     name: bilibili-comment-target
     runtime: node
     plan: free
+    region: singapore          # 新加坡，离中国近
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /health    # Render 用此路径做健康检查（必须快速响应）
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 3000
-    healthCheckPath: /api/health
-    autoDeploy: true
+      # ★ 前端域名白名单（CORS）
+      # 部署后改为你的 GitHub Pages 地址，如 https://你的用户名.github.io
+      # 多个源用逗号分隔；不设置则允许所有源（开发模式，不推荐生产）
+      - key: FRONTEND_URL
+        sync: false
+      # 兼容旧命名（二选一即可，FRONTEND_URL 优先）
+      - key: CORS_ORIGIN
+        sync: false
+      # 通用接口限流（次/分钟，默认120）
+      - key: RATE_LIMIT
+        value: 120
+      # 发布评论限流（次/分钟，默认20）
+      - key: ORDER_LIMIT
+        value: 20
+      # 是否启动中国IP代理池（默认true）
+      - key: USE_PROXY_POOL
+        value: "true"
+      # 是否允许浏览器登录接口（Render无法运行Puppeteer，生产建议false）
+      - key: ENABLE_BROWSER_LOGIN
+        value: "false"
