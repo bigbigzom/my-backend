@@ -1,0 +1,21 @@
+{
+  "name": "bilibili-comment-target-backend",
+  "version": "1.2.0",
+  "description": "B站评论系统攻防练习靶场 - 后端服务（中国IP代理池 + 信任设备登录 + 浏览器指纹随机化）",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "login": "node src/accounts/bilibili-login.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "undici": "^6.0.0",
+    "puppeteer": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
