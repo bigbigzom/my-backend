@@ -105,8 +105,9 @@ async function doLogin(options) {
   console.log(`登录模式: ${mode === 'phone' ? '手机号+验证码（建立信任设备）' : mode === 'password' ? '账号密码（信任设备）' : '智能登录（自动选择）'}`);
   console.log(`后端地址: ${backendUrl || '(未配置，Cookie仅本地保存)'}`);
   console.log(`浏览器模式: ${headless === 'true' ? '无头（后台）' : '有头（可见窗口）'}`);
-  console.log(`中国IP代理: ${useProxy !== false ? '✅ 开启（每次登录随机选IP）' : '❌ 禁用'}`);
-  console.log(`指纹随机化: ${useFingerprint !== false ? '✅ 开启（Canvas/WebGL/Audio/屏幕/硬件/时区）' : '❌ 禁用'}`);
+  console.log(`中国IP代理: ${useProxy !== false ? '✅ 开启（每账号绑定主用IP + 防同IP共用）' : '❌ 禁用'}`);
+  console.log(`指纹画像: ${useFingerprint !== false ? '✅ 开启（v2.2 账号绑定稳定指纹·20+维度·WebRTC防泄漏·IP地理一致）' : '❌ 禁用'}`);
+  console.log(`行为模拟: ✅ 开启（Bezier鼠标轨迹·逐字符输入·中文IME·随机浏览节奏）`);
   console.log('═'.repeat(50) + '\n');
 
   let result;
