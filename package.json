@@ -1,6 +1,6 @@
 {
   "name": "bilibili-comment-target-backend",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "B站评论系统攻防练习靶场 - 后端服务（GitHub Pages↔Render联通 + 中国IP代理池 + 信任设备登录 + 浏览器指纹随机化）",
   "type": "module",
   "main": "src/server.js",
