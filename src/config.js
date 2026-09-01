@@ -50,7 +50,11 @@ export const config = {
  * 获取 CORS 允许源列表
  */
 export function getAllowedOrigins() {
-  return config.frontendUrls.length > 0 ? config.frontendUrls : null;
+  // v1.5：本地前端（双击启动.bat → http://localhost:3456）始终放行，
+  // 即使配置了 FRONTEND_URL 白名单，本地调试/本地登录也不受 CORS 阻断
+  const LOCAL_ORIGINS = ['http://localhost:3456', 'http://127.0.0.1:3456'];
+  if (!config.frontendUrls.length) return null; // 未配置 → 允许所有（开发模式）
+  return [...new Set([...config.frontendUrls, ...LOCAL_ORIGINS])];
 }
 /**
  * 校验配置完整性
