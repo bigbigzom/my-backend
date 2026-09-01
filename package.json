@@ -1,7 +1,7 @@
 {
   "name": "bilibili-comment-target-backend",
-  "version": "3.0.0",
-  "description": "B\u7ad9\u8bc4\u8bba\u7cfb\u7edf\u653b\u9632\u7ec3\u4e60\u9776\u573a - \u540e\u7aef\u670d\u52a1\uff08GitHub Pages\u2194Render\u8054\u901a + \u4e2d\u56fdIP\u4ee3\u7406\u6c60 + \u4fe1\u4efb\u8bbe\u5907\u767b\u5f55 + \u6d4f\u89c8\u5668\u6307\u7eb9\u968f\u673a\u5316\uff09",
+  "version": "3.1.0",
+  "description": "B站内容互动管理平台后端服务（GitHub Pages↔Render联通 + 网络出口池 + 设备信任登录 + 浏览器环境特征模拟）",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
@@ -10,11 +10,11 @@
     "login": "node src/accounts/bilibili-login.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "express-rate-limit": "^7.1.5",
-    "undici": "^6.0.0",
-    "puppeteer": "^22.0.0"
+    "cors": "^2.8.6",
+    "express": "^4.22.2",
+    "express-rate-limit": "^7.5.1",
+    "puppeteer": "^22.0.0",
+    "undici": "^6.28.0"
   },
   "engines": {
     "node": ">=18.0.0"

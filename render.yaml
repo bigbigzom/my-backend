@@ -33,7 +33,7 @@ services:
       # 发布评论限流（次/分钟，默认20）
       - key: ORDER_LIMIT
         value: 20
-      # 是否启动中国IP代理池（默认true）
+      # 是否启用网络出口池（默认true）
       - key: USE_PROXY_POOL
         value: "true"
       # 是否允许浏览器登录接口（Render无法运行Puppeteer，生产建议false）
