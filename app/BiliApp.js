@@ -115,14 +115,19 @@ export class BiliApp {
       res.status(500).json({ code: -1, message: err.message });
     });
 
+    // 修复 express-rate-limit ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+    app.set('trust proxy', 1);
+
     // 启动代理池
     this.proxyService.start();
 
     // 启动监控引擎
     try { this.monitorService.start(); } catch (e) { console.warn('[BiliApp] 监控引擎启动失败:', e.message); }
 
-    // v5.1 链式2：Render作为第二层HTTP代理（处理CONNECT，经地区IP转发到目标）
-    app.on('connect', (req, clientSocket, head) => {
+    // v5.1 链式2 CONNECT代理（在server创建后绑定）
+    const _self = this;
+    const setupConnectProxy = (server) => {
+server.on('connect', (req, clientSocket, head) => {
       const target = req.url; // "host:port"
       const region = req.headers['x-proxy-region'] || 'CN';
       const [host, portStr] = target.split(':');
@@ -171,10 +176,12 @@ export class BiliApp {
         sendHead();
       }
     });
+    };
 
     // 监听
     const port = this.config.port;
     this._server = app.listen(port, () => {
+      setupConnectProxy(this._server);
       console.log('');
       console.log('╔══════════════════════════════════════════════════════════╗');
       console.log('║  B站内容互动管理平台后端 v5.1.0（全球多地区+链式2）       ║');

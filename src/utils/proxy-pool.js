@@ -21,7 +21,7 @@ const REFRESH_INTERVAL_MS = 50 * 1000;  // 刷新间隔50秒（防止Render休�
 const MIN_READY_POOL_SIZE = 5;           // 可用池最低水位
 const MAX_PROXIES_PER_SOURCE = 200;      // 每个源最多保留多少代理
 const MAX_TOTAL_TO_VALIDATE = 1000;      // 每次刷新最多验证多少个
-const PROXY_EXPIRE_MS = 30 * 60 * 1000;  // 可用IP过期时间30分钟
+const PROXY_EXPIRE_MS = 30 * 60 * 1000;  // IP新鲜度阈值（超过则惰性重验证，不立即移除）
 
 // 支持的地区（只有IP数量多的国家才计入）
 export const SUPPORTED_REGIONS = {
@@ -208,9 +208,14 @@ async function validationLoop() {
       if (result) {
         const existing = readyPool.find((p) => p.proxy === result.proxy);
         if (existing) {
+          // v5.2 增量刷新：更新验证时间和速度，但保留原地区/城市信息（不覆盖）
           existing.speed = result.speed;
           existing.lastChecked = Date.now();
           existing.failCount = 0;
+          // 只在地区缺失时补充
+          if (!existing.region && result.region) existing.region = result.region;
+          if (!existing.city && result.city) existing.city = result.city;
+          if (!existing.timezone && result.timezone) existing.timezone = result.timezone;
         } else {
           readyPool.push(result);
           readyPool.sort((a, b) => a.speed - b.speed);
@@ -230,11 +235,14 @@ async function validationLoop() {
 // 刷新（增量）
 // ============================================================
 function cleanupExpired() {
+  // v5.2 增量刷新：不主动清理过期IP，改为惰性验证（使用时才检测有效性）
+  // 只清理连续失败>=3次的IP（在markProxyFailed中处理）
   const now = Date.now();
   const before = readyPool.length;
-  readyPool = readyPool.filter((p) => now - p.lastChecked < PROXY_EXPIRE_MS);
+  // 超过2倍过期时间且从未被使用过的才清理（防止内存无限增长）
+  readyPool = readyPool.filter((p) => now - p.lastChecked < PROXY_EXPIRE_MS * 2 || p.inUseBy);
   if (readyPool.length < before) {
-    console.log(`[ProxyPool] 清理过期代理: ${before} -> ${readyPool.length}`);
+    console.log(`[ProxyPool] 清理超长期未验证IP: ${before} -> ${readyPool.length}`);
   }
 }
 
@@ -269,15 +277,27 @@ export async function refreshProxyPool() {
 // 对外接口
 // ============================================================
 /** 获取一个可用代理（优先选速度快的，从前30%最快中随机选）
- * @param {string} [region] - 可选地区过滤（US/CA/DE/FR/GB/JP/HK/CN）
+ * v5.2 惰性验证：过期IP不立即移除，使用时标记待重新验证
+ * @param {string} [region] - 可选地区过滤
  */
 export function getProxy(region = null) {
   let pool = readyPool;
   if (region) pool = readyPool.filter(p => p.region === region);
   if (pool.length === 0) return null;
-  const topCount = Math.max(1, Math.floor(pool.length * 0.3));
+  // 优先选未过期的，过期的放后面
+  const now = Date.now();
+  const fresh = pool.filter(p => now - p.lastChecked < PROXY_EXPIRE_MS);
+  const stale = pool.filter(p => now - p.lastChecked >= PROXY_EXPIRE_MS);
+  const selectFrom = fresh.length > 0 ? fresh : stale;
+  const topCount = Math.max(1, Math.floor(selectFrom.length * 0.3));
   const idx = Math.floor(Math.random() * topCount);
-  return pool[idx];
+  const p = selectFrom[idx];
+  // 惰性验证：如果过期了，加入待验证队列
+  if (stale.includes(p) && !validateQueue.includes(p.proxy)) {
+    validateQueue.push(p.proxy);
+    if (!isValidating) validationLoop();
+  }
+  return p;
 }
 
 /**
