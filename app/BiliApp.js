@@ -14,6 +14,8 @@ import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import net from 'net';
 import { AppConfig } from '../config/AppConfig.js';
 import { AccountService } from '../services/AccountService.js';
 import { CommentService } from '../services/CommentService.js';
@@ -138,7 +140,6 @@ server.on('connect', (req, clientSocket, head) => {
         return;
       }
       // 经地区IP连接目标
-      const net = require('net');
       const [ph, pp] = proxy.proxy.split(':');
       const upstream = net.connect(parseInt(pp, 10), ph, () => {
         upstream.write(`CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\n\r\n`);
@@ -180,8 +181,6 @@ server.on('connect', (req, clientSocket, head) => {
 
     // v5.3 链式2：WebSocket隧道（Render LB不支持CONNECT，改用WS）
     const setupWsTunnel = (server, appRef) => {
-      const crypto = require('crypto');
-      const net = require('net');
       const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
       server.on('upgrade', (req, socket, head) => {
