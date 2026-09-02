@@ -178,10 +178,138 @@ server.on('connect', (req, clientSocket, head) => {
     });
     };
 
+    // v5.3 链式2：WebSocket隧道（Render LB不支持CONNECT，改用WS）
+    const setupWsTunnel = (server, appRef) => {
+      const crypto = require('crypto');
+      const net = require('net');
+      const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+      server.on('upgrade', (req, socket, head) => {
+        if (!req.url || !req.url.startsWith('/api/proxy/ws-tunnel')) return;
+        const url = new URL(req.url, 'http://localhost');
+        const region = url.searchParams.get('region') || 'CN';
+
+        // WebSocket握手
+        const key = req.headers['sec-websocket-key'];
+        if (!key) { socket.destroy(); return; }
+        const accept = crypto.createHash('sha1').update(key + WS_GUID).digest('base64');
+        socket.write(
+          'HTTP/1.1 101 Switching Protocols\r\n' +
+          'Upgrade: websocket\r\n' +
+          'Connection: Upgrade\r\n' +
+          'Sec-WebSocket-Accept: ' + accept + '\r\n\r\n'
+        );
+
+
+        console.log(`[WsTunnel] 客户端连接, region=${region}`);
+
+        // 状态机：等待第一条文本帧（目标地址），然后建立上游连接
+        let buf = Buffer.alloc(0);
+        let targetConnected = false;
+        let upstream = null;
+
+        const parseFrame = () => {
+          if (buf.length < 2) return null;
+          const b0 = buf[0], b1 = buf[1];
+          const fin = (b0 & 0x80) !== 0;
+          const opcode = b0 & 0x0f;
+          const masked = (b1 & 0x80) !== 0;
+          let len = b1 & 0x7f;
+          let offset = 2;
+          if (len === 126) { if (buf.length < 4) return null; len = buf.readUInt16BE(2); offset = 4; }
+          else if (len === 127) { if (buf.length < 10) return null; len = Number(buf.readBigUInt64BE(2)); offset = 10; }
+          let maskKey = null;
+          if (masked) {
+            if (buf.length < offset + 4) return null;
+            maskKey = buf.slice(offset, offset + 4); offset += 4;
+          }
+          if (buf.length < offset + len) return null;
+          let payload = buf.slice(offset, offset + len);
+          if (masked && maskKey) {
+            for (let i = 0; i < payload.length; i++) payload[i] ^= maskKey[i % 4];
+          }
+          buf = buf.slice(offset + len);
+          return { fin, opcode, payload };
+        };
+
+        const sendFrame = (data, isBinary = true) => {
+          const payload = Buffer.isBuffer(data) ? data : Buffer.from(data);
+          const len = payload.length;
+          let header;
+          if (len < 126) header = Buffer.from([0x80 | (isBinary ? 2 : 1), len]);
+          else if (len < 65536) { header = Buffer.alloc(4); header[0] = 0x80 | (isBinary ? 2 : 1); header[1] = 126; header.writeUInt16BE(len, 2); }
+          else { header = Buffer.alloc(10); header[0] = 0x80 | (isBinary ? 2 : 1); header[1] = 127; header.writeBigUInt64BE(BigInt(len), 2); }
+          socket.write(Buffer.concat([header, payload]));
+        };
+
+        const connectUpstream = (targetHost, targetPort) => {
+          const proxy = appRef.proxyService.get(region);
+          if (!proxy) {
+            sendFrame(JSON.stringify({ error: `无${region}地区可用IP` }), false);
+            socket.destroy();
+            return;
+          }
+          const [ph, pp] = proxy.proxy.split(':');
+          upstream = net.connect(parseInt(pp, 10), ph, () => {
+            upstream.write(`CONNECT ${targetHost}:${targetPort} HTTP/1.1
+Host: ${targetHost}:${targetPort}
+
+`);
+          });
+          let established = false;
+          let upBuf = Buffer.alloc(0);
+          upstream.on('data', (chunk) => {
+            if (!established) {
+              upBuf = Buffer.concat([upBuf, chunk]);
+              const idx = upBuf.indexOf('\r\n\r\n');
+              if (idx >= 0) {
+                const statusLine = upBuf.slice(0, idx).toString().split('\r\n')[0];
+                if (statusLine.includes(' 200 ')) {
+                  established = true;
+                  targetConnected = true;
+                  sendFrame(JSON.stringify({ connected: true }), false);
+                  const rest = upBuf.slice(idx + 4);
+                  if (rest.length > 0) sendFrame(rest, true);
+                } else {
+                  sendFrame(JSON.stringify({ error: '上游代理CONNECT失败: ' + statusLine }), false);
+                  upstream.destroy();
+                }
+              }
+            } else {
+              sendFrame(chunk, true);
+            }
+          });
+          upstream.on('error', (e) => { console.warn('[WsTunnel] 上游错误:', e.message); try { socket.destroy(); } catch {} });
+          upstream.on('close', () => { try { socket.destroy(); } catch {} });
+        };
+
+        socket.on('data', (chunk) => {
+          buf = Buffer.concat([buf, chunk]);
+          let frame;
+          while ((frame = parseFrame())) {
+            if (frame.opcode === 0x8) { socket.destroy(); break; } // close
+            if (frame.opcode === 0x1 && !targetConnected) {
+              // 第一条文本帧：目标地址 "host:port"
+              const target = frame.payload.toString().trim();
+              const [host, portStr] = target.split(':');
+              connectUpstream(host, parseInt(portStr, 10) || 443);
+            } else if (frame.opcode === 0x2 && targetConnected && upstream) {
+              // 二进制帧：转发到上游
+              upstream.write(frame.payload);
+            }
+          }
+        });
+        socket.on('error', () => { try { upstream && upstream.destroy(); } catch {} });
+        socket.on('close', () => { try { upstream && upstream.destroy(); } catch {} });
+      });
+      console.log('[WsTunnel] WebSocket隧道已启用: /api/proxy/ws-tunnel?region=XX');
+    };
+
     // 监听
     const port = this.config.port;
     this._server = app.listen(port, () => {
       setupConnectProxy(this._server);
+      setupWsTunnel(this._server, _self);
       console.log('');
       console.log('╔══════════════════════════════════════════════════════════╗');
       console.log('║  B站内容互动管理平台后端 v5.1.0（全球多地区+链式2）       ║');
