@@ -121,12 +121,63 @@ export class BiliApp {
     // 启动监控引擎
     try { this.monitorService.start(); } catch (e) { console.warn('[BiliApp] 监控引擎启动失败:', e.message); }
 
+    // v5.1 链式2：Render作为第二层HTTP代理（处理CONNECT，经地区IP转发到目标）
+    app.on('connect', (req, clientSocket, head) => {
+      const target = req.url; // "host:port"
+      const region = req.headers['x-proxy-region'] || 'CN';
+      const [host, portStr] = target.split(':');
+      const port = parseInt(portStr, 10) || 443;
+      const proxy = this.proxyService.get(region);
+      if (!proxy) {
+        clientSocket.end('HTTP/1.1 503 No Proxy Available\r\n\r\n');
+        return;
+      }
+      // 经地区IP连接目标
+      const net = require('net');
+      const [ph, pp] = proxy.proxy.split(':');
+      const upstream = net.connect(parseInt(pp, 10), ph, () => {
+        upstream.write(`CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\n\r\n`);
+      });
+      let established = false;
+      let buf = Buffer.alloc(0);
+      upstream.on('data', (chunk) => {
+        if (!established) {
+          buf = Buffer.concat([buf, chunk]);
+          const idx = buf.indexOf('\r\n\r\n');
+          if (idx >= 0) {
+            const statusLine = buf.slice(0, idx).toString().split('\r\n')[0];
+            if (statusLine.includes(' 200 ')) {
+              established = true;
+              clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+              const rest = buf.slice(idx + 4);
+              if (rest.length > 0) clientSocket.write(rest);
+            } else {
+              clientSocket.end(`HTTP/1.1 502 Upstream Error\r\n\r\n`);
+              upstream.destroy();
+            }
+          }
+        } else {
+          clientSocket.write(chunk);
+        }
+      });
+      upstream.on('error', () => { try { clientSocket.destroy(); } catch {} });
+      upstream.on('close', () => { try { clientSocket.destroy(); } catch {} });
+      clientSocket.on('data', (chunk) => { if (established) upstream.write(chunk); });
+      clientSocket.on('error', () => { try { upstream.destroy(); } catch {} });
+      clientSocket.on('close', () => { try { upstream.destroy(); } catch {} });
+      if (head && head.length > 0) {
+        // 等待established后再发送
+        const sendHead = () => { if (established) upstream.write(head); else setTimeout(sendHead, 10); };
+        sendHead();
+      }
+    });
+
     // 监听
     const port = this.config.port;
     this._server = app.listen(port, () => {
       console.log('');
       console.log('╔══════════════════════════════════════════════════════════╗');
-      console.log('║  B站内容互动管理平台后端 v4.0.0（OOP重构+热度追踪）       ║');
+      console.log('║  B站内容互动管理平台后端 v5.1.0（全球多地区+链式2）       ║');
       console.log('╠══════════════════════════════════════════════════════════╣');
       console.log(`║  端口: ${port}                                                ║`);
       console.log('║  架构: OOP分层 (API→Service→bili-api/utils)             ║');
