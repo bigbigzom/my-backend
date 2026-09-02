@@ -123,7 +123,13 @@ export function createApiRouter(app) {
 
   // ==================== 代理池 ====================
   router.get('/proxy/stats', (req, res) => ok(res, proxyService.getStats()));
-  router.get('/proxy/available', (req, res) => ok(res, { proxies: proxyService.getAvailable(parseInt(req.query.limit) || 100) }));
+  router.get('/proxy/available', (req, res) => ok(res, { proxies: proxyService.getAvailable(parseInt(req.query.limit) || 100, req.query.region || null) }));
+  router.get('/proxy/regions', (req, res) => ok(res, proxyService.getSupportedRegions()));
+  router.get('/proxy/random', (req, res) => {
+    const region = req.query.region || null;
+    const p = proxyService.get(region);
+    ok(res, p ? { proxy: p } : { proxy: null, message: region ? `${region}地区暂无可用IP` : '暂无可用IP' });
+  });
   router.post('/proxy/refresh', (req, res) => handle(res, () => proxyService.refresh()));
   router.get('/proxy/global', (req, res) => ok(res, { globalProxy: proxyService.get() }));
   router.post('/proxy/global', (req, res) => ok(res, { success: true }));

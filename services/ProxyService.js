@@ -6,7 +6,7 @@
 import {
   startProxyPool, getProxyPoolStats, refreshProxyPool, getProxy,
   acquireProxy, markProxyFailed, isProxyReady, getAvailableProxies,
-  getOccupancyStats,
+  getOccupancyStats, waitForProxy, getProxyForAccount, SUPPORTED_REGIONS,
 } from '../src/utils/proxy-pool.js';
 
 export class ProxyService {
@@ -23,11 +23,14 @@ export class ProxyService {
 
   getStats() { return getProxyPoolStats(); }
   async refresh() { return refreshProxyPool(); }
-  get() { return getProxy(); }
-  acquire() { return acquireProxy(); }
+  get(region = null) { return getProxy(region); }
+  acquire(accountKey, preferredProxy = null, opts = {}) { return acquireProxy(accountKey, preferredProxy, opts); }
   markFailed(proxy) { return markProxyFailed(proxy); }
   isReady(proxy) { return isProxyReady(proxy); }
-  getAvailable(limit = 100) { return getAvailableProxies(limit); }
+  getAvailable(limit = 100, region = null) { return getAvailableProxies(limit, region); }
   getOccupancy() { return getOccupancyStats(); }
+  async waitForProxy(timeoutMs = 15000, region = null) { return waitForProxy(timeoutMs, region); }
+  getProxyForAccount(account, opts = {}) { return getProxyForAccount(account, opts); }
+  getSupportedRegions() { return SUPPORTED_REGIONS; }
 }
 export default ProxyService;

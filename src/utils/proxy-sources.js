@@ -1,19 +1,20 @@
 /**
- * 中国IP代理源配置（共享模块 v1.5.3）
+ * 多地区代理源配置（v5.0 全球地区版）
  *
  * 本文件同时部署在：
  *   - local-login-service/lib/proxy-sources.js（本地登录服务）
  *   - backend/src/utils/proxy-sources.js（Render 后端）
  * 两处内容必须完全一致，保证代理源列表统一。
  *
- * 所有源均为公开免费代理，抓取后通过 ip-api.com 验证出口国家=CN，
- * 非中国IP会被过滤剔除。
+ * 所有源均为公开免费代理，抓取后通过 ip-api.com 验证出口国家，
+ * 自动分类到8个地区：US/CA/DE/FR/GB/JP/HK/CN，其他国家过滤。
  *
  * 源分类：
  *   A. GitHub raw 纯文本源（量大、稳定，优先）
- *   B. API 源（支持 country=CN 筛选）
+ *   B. API 源（支持 country 筛选）
  *   C. 国内代理网站（HTML 解析）
  *   D. GitHub 镜像/CDN 源（国内可直连，备选）
+ *   E. 国际代理源（v5.0 新增：全球多地区IP）
  */
 
 export const CN_PROXY_SOURCES = [
@@ -192,6 +193,117 @@ export const CN_PROXY_SOURCES = [
     getUrl: () => 'https://ghproxy.com/https://raw.githubusercontent.com/MuRongPIG/Proxy-Master/main/http.txt',
     pages: 1,
   },
+  // ============================================================
+  // E. 国际代理源（v5.0 新增：全球多地区IP）
+  // 这些源包含全球IP，验证时按国家代码自动分类到8个地区
+  // ============================================================
+  {
+    name: 'TheSpeedX/PROXY-List(http)',
+    getUrl: () => 'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt',
+    pages: 1,
+  },
+  {
+    name: 'TheSpeedX/PROXY-List(socks4)',
+    getUrl: () => 'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt',
+    pages: 1,
+  },
+  {
+    name: 'TheSpeedX/PROXY-List(socks5)',
+    getUrl: () => 'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt',
+    pages: 1,
+  },
+  {
+    name: 'monosans/proxy-list(http)',
+    getUrl: () => 'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt',
+    pages: 1,
+  },
+  {
+    name: 'monosans/proxy-list(socks5)',
+    getUrl: () => 'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt',
+    pages: 1,
+  },
+  {
+    name: 'proxifly/proxies(http)',
+    getUrl: () => 'https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt',
+    pages: 1,
+  },
+  {
+    name: 'proxifly/proxies(socks5)',
+    getUrl: () => 'https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks5/data.txt',
+    pages: 1,
+  },
+  {
+    name: 'proxy-scraper(http)',
+    getUrl: () => 'https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt',
+    pages: 1,
+  },
+  {
+    name: 'proxy-scraper(socks4)',
+    getUrl: () => 'https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/socks4.txt',
+    pages: 1,
+  },
+  {
+    name: 'proxy-scraper(socks5)',
+    getUrl: () => 'https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/socks5.txt',
+    pages: 1,
+  },
+  {
+    name: 'free-proxy-list.net',
+    getUrl: () => 'https://free-proxy-list.net/',
+    pages: 1,
+    isHtml: true,
+  },
+  {
+    name: 'us-proxy.org(美国)',
+    getUrl: () => 'https://www.us-proxy.org/',
+    pages: 1,
+    isHtml: true,
+  },
+  {
+    name: 'proxydb.net',
+    getUrl: (page) => `https://proxydb.net/?protocol=http&anonlvl=4&country=&offset=${(page-1)*15}`,
+    pages: 3,
+    isHtml: true,
+  },
+  {
+    name: 'proxy-list.download(http)',
+    getUrl: () => 'https://www.proxy-list.download/api/v1/get?type=http',
+    pages: 1,
+  },
+  {
+    name: 'proxy-list.download(socks5)',
+    getUrl: () => 'https://www.proxy-list.download/api/v1/get?type=socks5',
+    pages: 1,
+  },
+  {
+    name: 'openproxylist(http)',
+    getUrl: () => 'https://openproxylist.xyz/http.txt',
+    pages: 1,
+  },
+  {
+    name: 'openproxylist(socks5)',
+    getUrl: () => 'https://openproxylist.xyz/socks5.txt',
+    pages: 1,
+  },
+  {
+    name: 'geonode/free',
+    getUrl: () => 'https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc',
+    pages: 1,
+    isJson: true,
+  },
+  {
+    name: 'spys.me(http)',
+    getUrl: () => 'https://spys.me/proxy.txt',
+    pages: 1,
+  },
+  {
+    name: 'anonymfile-proxylist',
+    getUrl: () => 'https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/http_proxies.txt',
+    pages: 1,
+  },
 ];
+
+// v5.0：统一导出为 PROXY_SOURCES（包含中国+国际源，验证时自动按地区分类）
+export const PROXY_SOURCES = CN_PROXY_SOURCES;
 
 export default CN_PROXY_SOURCES;

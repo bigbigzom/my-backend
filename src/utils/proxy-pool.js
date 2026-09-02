@@ -1,11 +1,11 @@
 /**
- * 中国IP代理池模块（适配B站内容互动管理平台）
+ * 多地区IP代理池模块（v5.0 全球地区版）
  *
- * 基于 fansky-shop 项目的代理池改造：
- * - 验证目标从爱赞助(azz.ee)改为B站(api.bilibili.com)
+ * 支持8个地区：美国(US)、加拿大(CA)、德国(DE)、法国(FR)、英国(GB)、日本(JP)、香港(HK)、中国(CN)
+ * - 验证目标：B站(api.bilibili.com) + 出口IP国家识别
  * - 50秒定时增量刷新，防止Render休眠
- * - 动态验证：出口IP在中国 + 能访问B站API
  * - 可用IP缓存30分钟，连续失败3次自动剔除
+ * - 按地区筛选分配，账号绑定地区后IP失效同地区重分配
  *
  * 依赖：undici（ProxyAgent 支持 HTTPS over HTTP proxy）
  */
@@ -22,6 +22,28 @@ const MIN_READY_POOL_SIZE = 5;           // 可用池最低水位
 const MAX_PROXIES_PER_SOURCE = 200;      // 每个源最多保留多少代理
 const MAX_TOTAL_TO_VALIDATE = 1000;      // 每次刷新最多验证多少个
 const PROXY_EXPIRE_MS = 30 * 60 * 1000;  // 可用IP过期时间30分钟
+
+// 支持的地区（只有IP数量多的国家才计入）
+export const SUPPORTED_REGIONS = {
+  US: { name: '美国', code: 'US', languages: ['en-US', 'en'], timezone: 'America/New_York' },
+  CA: { name: '加拿大', code: 'CA', languages: ['en-CA', 'en', 'fr-CA'], timezone: 'America/Toronto' },
+  DE: { name: '德国', code: 'DE', languages: ['de-DE', 'de', 'en'], timezone: 'Europe/Berlin' },
+  FR: { name: '法国', code: 'FR', languages: ['fr-FR', 'fr', 'en'], timezone: 'Europe/Paris' },
+  GB: { name: '英国', code: 'GB', languages: ['en-GB', 'en'], timezone: 'Europe/London' },
+  JP: { name: '日本', code: 'JP', languages: ['ja-JP', 'ja', 'en'], timezone: 'Asia/Tokyo' },
+  HK: { name: '香港', code: 'HK', languages: ['zh-HK', 'zh-TW', 'zh', 'en'], timezone: 'Asia/Hong_Kong' },
+  CN: { name: '中国', code: 'CN', languages: ['zh-CN', 'zh', 'en'], timezone: 'Asia/Shanghai' },
+};
+const SUPPORTED_COUNTRY_CODES = new Set(Object.keys(SUPPORTED_REGIONS));
+// 国家代码到地区的映射（处理特殊情况）
+function countryCodeToRegion(cc) {
+  if (!cc) return null;
+  const upper = String(cc).toUpperCase();
+  if (SUPPORTED_COUNTRY_CODES.has(upper)) return upper;
+  // 英国可能返回 UK
+  if (upper === 'UK') return 'GB';
+  return null;
+}
 
 // B站验证目标（适配：验证代理能否正常访问B站API）
 const BILI_VALIDATE_URL = 'https://api.bilibili.com/x/web-interface/nav';
@@ -136,8 +158,8 @@ async function validateProxy(proxyAddr) {
     if (!ipRes.ok) return null;
     const ipData = await ipRes.json();
     if (ipData.status !== 'success') return null;
-    const isChina = ipData.countryCode === 'CN' || ipData.country === 'China';
-    if (!isChina) return null;
+    const region = countryCodeToRegion(ipData.countryCode);
+    if (!region) return null; // 只保留支持的8个地区
 
     // 第二步：确认能访问B站API（适配改造）
     const biliRes = await undiciFetch(BILI_VALIDATE_URL, {
@@ -160,7 +182,10 @@ async function validateProxy(proxyAddr) {
       speed: elapsed,
       ip: ipData.query,
       city: ipData.city || ipData.regionName || '',
-      timezone: ipData.timezone || '',
+      country: ipData.country || '',
+      countryCode: ipData.countryCode || '',
+      region,
+      timezone: ipData.timezone || SUPPORTED_REGIONS[region]?.timezone || '',
       lastChecked: Date.now(),
       failCount: 0,
       inUseBy: null,
@@ -243,12 +268,16 @@ export async function refreshProxyPool() {
 // ============================================================
 // 对外接口
 // ============================================================
-/** 获取一个可用代理（优先选速度快的，从前30%最快中随机选） */
-export function getProxy() {
-  if (readyPool.length === 0) return null;
-  const topCount = Math.max(1, Math.floor(readyPool.length * 0.3));
+/** 获取一个可用代理（优先选速度快的，从前30%最快中随机选）
+ * @param {string} [region] - 可选地区过滤（US/CA/DE/FR/GB/JP/HK/CN）
+ */
+export function getProxy(region = null) {
+  let pool = readyPool;
+  if (region) pool = readyPool.filter(p => p.region === region);
+  if (pool.length === 0) return null;
+  const topCount = Math.max(1, Math.floor(pool.length * 0.3));
   const idx = Math.floor(Math.random() * topCount);
-  return readyPool[idx];
+  return pool[idx];
 }
 
 /**
@@ -274,7 +303,8 @@ export function acquireProxy(accountKey, preferredProxy = null, opts = {}) {
   if (!accountKey) accountKey = 'unknown';
   const excludeProxies = new Set(opts.excludeProxies || []);
   const excludeIps = new Set(opts.excludeIps || []);
-  const isExcluded = (p) => excludeProxies.has(p.proxy) || excludeIps.has(p.ip);
+  const region = opts.region || null;
+  const isExcluded = (p) => excludeProxies.has(p.proxy) || excludeIps.has(p.ip) || (region && p.region !== region);
 
   // 1. 优先返回账号主用IP（独立运营：账号绑定固定常用IP，模拟真实用户固定所在地）
   if (preferredProxy && !isExcluded({ proxy: preferredProxy })) {
@@ -327,6 +357,8 @@ export function getProxyForAccount(account, opts = {}) {
   if (!account) return getProxy();
   const excludeProxies = [];
   const excludeIps = [];
+  // v5.0 地区绑定：账号注册时的地区决定IP地区
+  const region = account.region || opts.region || null;
   // v2.3 独立运营：评论者账号排除发布者账号的主用IP
   if (opts.excludePublisherIps) {
     for (const ip of opts.excludePublisherIps) {
@@ -334,7 +366,9 @@ export function getProxyForAccount(account, opts = {}) {
       else excludeIps.push(ip);
     }
   }
-  return acquireProxy(accountKeyOf(account), account.primaryProxy, { excludeProxies, excludeIps });
+  const proxy = acquireProxy(accountKeyOf(account), account.primaryProxy, { excludeProxies, excludeIps, region });
+  // v5.0：如果该地区无可用IP，返回null（账号保持静默，不跨地区分配）
+  return proxy;
 }
 /**
  * 标记代理被B站账号受限（立即剔除）
@@ -357,13 +391,17 @@ export function getOccupancyStats() {
   };
 }
 
-/** 等待可用代理（最多等待 timeoutMs） */
-export async function waitForProxy(timeoutMs = 15000) {
-  if (readyPool.length > 0) return getProxy();
-  console.log('[ProxyPool] 可用池为空，等待验证...');
+/** 等待可用代理（最多等待 timeoutMs）
+ * @param {number} timeoutMs
+ * @param {string} [region] - 可选地区过滤
+ */
+export async function waitForProxy(timeoutMs = 15000, region = null) {
+  if (getProxy(region)) return getProxy(region);
+  console.log(`[ProxyPool] ${region ? region+'地区' : ''}可用池为空，等待验证...`);
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (readyPool.length > 0) return getProxy();
+    const p = getProxy(region);
+    if (p) return p;
     if (!isValidating && validateQueue.length > 0) validationLoop();
     await new Promise((r) => setTimeout(r, 500));
   }
@@ -382,18 +420,23 @@ export function markProxyFailed(proxyAddr) {
 }
 
 /**
- * 获取所有可用中国IP列表（v1.5.4：供本地登录服务远程拉取）
+ * 获取所有可用IP列表（v5.0：多地区，供本地登录服务远程拉取）
  * 返回精简字段，最小化传输量
  * @param {number} limit - 最多返回多少个（默认全部，按速度排序）
+ * @param {string} [region] - 可选地区过滤
  */
-export function getAvailableProxies(limit = 0) {
-  const list = readyPool
-    .filter(p => !p.inUseBy) // 只返回未被占用的
+export function getAvailableProxies(limit = 0, region = null) {
+  let pool = readyPool.filter(p => !p.inUseBy);
+  if (region) pool = pool.filter(p => p.region === region);
+  const list = pool
     .sort((a, b) => a.speed - b.speed)
     .map(p => ({
       proxy: p.proxy,
       ip: p.ip,
       city: p.city || '',
+      country: p.country || '',
+      countryCode: p.countryCode || '',
+      region: p.region || '',
       speed: p.speed,
       timezone: p.timezone || '',
       lastChecked: p.lastChecked,
@@ -401,8 +444,14 @@ export function getAvailableProxies(limit = 0) {
   return limit > 0 ? list.slice(0, limit) : list;
 }
 
-/** 获取代理池统计信息 */
+/** 获取代理池统计信息（含按地区统计） */
 export function getProxyPoolStats() {
+  const byRegion = {};
+  for (const p of readyPool) {
+    const r = p.region || 'OTHER';
+    if (!byRegion[r]) byRegion[r] = 0;
+    byRegion[r]++;
+  }
   return {
     readyCount: readyPool.length,
     queueCount: validateQueue.length,
@@ -414,13 +463,13 @@ export function getProxyPoolStats() {
         ? Math.round(readyPool.reduce((a, b) => a + b.speed, 0) / readyPool.length)
         : 0,
     fastest: readyPool[0]
-      ? { proxy: readyPool[0].proxy, speed: readyPool[0].speed, ip: readyPool[0].ip }
+      ? { proxy: readyPool[0].proxy, speed: readyPool[0].speed, ip: readyPool[0].ip, region: readyPool[0].region }
       : null,
     top5: readyPool.slice(0, 5).map((p) => ({
-      proxy: p.proxy,
-      speed: p.speed,
-      ip: p.ip,
+      proxy: p.proxy, speed: p.speed, ip: p.ip, region: p.region,
     })),
+    byRegion,
+    supportedRegions: Object.keys(SUPPORTED_REGIONS),
   };
 }
 
