@@ -43,6 +43,13 @@ export class Account {
     this.proxy = data.proxy || null;
     this.proxyCity = data.proxyCity || '';
     this.userAgent = data.userAgent || '';
+    // v1.5.3：IP粘性字段（注册时的中国IP + 运行时绑定 + 失败计数）
+    // 目标：每个账号尽可能长时间复用同一个中国IP，直到确认失效才更换
+    this.registeredProxyIp = data.registeredProxyIp || data.proxy || null;  // 注册时使用的中国IP（本地同步过来）
+    this.lastUsedProxyIp = data.lastUsedProxyIp || data.registeredProxyIp || data.proxy || null;  // 最近一次实际使用的IP
+    this.proxyIpFailCount = data.proxyIpFailCount || 0;  // 当前绑定IP连续失败次数（>=3 视为失效）
+    this.proxyIpBoundAt = data.proxyIpBoundAt || data.registeredAt || null;  // 当前IP绑定时间
+    this.registeredAt = data.registeredAt || null;  // 注册时间戳
     // 完整设备环境（本地登录时采集，后端操作时必须使用相同环境，降低平台安全机制）
     this.deviceProfile = data.deviceProfile || data.deviceEnv || null;
 
@@ -284,6 +291,62 @@ export class Account {
   }
 
   // ============================================================
+  // v1.5.3 IP粘性管理（每个账号尽可能复用同一个中国IP）
+  // ============================================================
+  /**
+   * 获取账号应使用的代理IP（粘性策略）
+   * 优先级：lastUsedProxyIp（未失效）> registeredProxyIp（未失效）> null（调用方从池分配新IP）
+   * @param {Function} isProxyReadyFn - 检查IP是否仍在可用池的函数 (proxyAddr) => boolean
+   * @returns {string|null} ip:port 字符串
+   */
+  getStickyProxy(isProxyReadyFn) {
+    // 1. 优先用最近一次使用的IP（如果仍可用且失败次数<3）
+    if (this.lastUsedProxyIp && this.proxyIpFailCount < 3) {
+      if (!isProxyReadyFn || isProxyReadyFn(this.lastUsedProxyIp)) {
+        return this.lastUsedProxyIp;
+      }
+    }
+    // 2. 回退到注册时的IP（如果仍可用）
+    if (this.registeredProxyIp && this.registeredProxyIp !== this.lastUsedProxyIp) {
+      if (!isProxyReadyFn || isProxyReadyFn(this.registeredProxyIp)) {
+        this.lastUsedProxyIp = this.registeredProxyIp;
+        this.proxyIpFailCount = 0;
+        this.proxyIpBoundAt = Date.now();
+        return this.registeredProxyIp;
+      }
+    }
+    // 3. 都不可用 → 返回null，调用方从代理池分配新IP
+    return null;
+  }
+
+  /**
+   * 绑定一个新的代理IP（当粘性IP失效后，从池分配到新IP时调用）
+   */
+  bindProxy(proxyAddr) {
+    if (!proxyAddr) return this;
+    this.lastUsedProxyIp = proxyAddr;
+    this.proxyIpFailCount = 0;
+    this.proxyIpBoundAt = Date.now();
+    return this;
+  }
+
+  /**
+   * 标记当前绑定IP失败一次（连续3次视为失效，下次getStickyProxy会返回null触发换新）
+   */
+  markProxyFailed() {
+    this.proxyIpFailCount = (this.proxyIpFailCount || 0) + 1;
+    return this;
+  }
+
+  /**
+   * 标记当前IP使用成功（重置失败计数）
+   */
+  markProxySuccess() {
+    this.proxyIpFailCount = 0;
+    return this;
+  }
+
+  // ============================================================
   // 序列化
   // ============================================================
 
@@ -305,6 +368,11 @@ export class Account {
       proxy: this.proxy,
       proxyCity: this.proxyCity,
       userAgent: this.userAgent,
+      registeredProxyIp: this.registeredProxyIp,
+      lastUsedProxyIp: this.lastUsedProxyIp,
+      proxyIpFailCount: this.proxyIpFailCount,
+      proxyIpBoundAt: this.proxyIpBoundAt,
+      registeredAt: this.registeredAt,
       deviceProfile: this.deviceProfile,
       accountType: this.accountType,
       cultivationStage: this.cultivationStage,

@@ -276,6 +276,10 @@ export class AccountManagerV2 extends EventEmitter {
           deviceEnv: data.deviceEnv || data.deviceProfile || null,
           fingerprint: data.fingerprint || null,
           proxyCity: data.proxyCity || '',
+          // v1.5.3：IP粘性字段透传（注册时的中国IP + 注册时间）
+          registeredProxyIp: data.registeredProxyIp || data.proxy || null,
+          registeredAt: data.registeredAt || null,
+          lastUsedProxyIp: data.lastUsedProxyIp || data.registeredProxyIp || data.proxy || null,
         });
         if (data.cookie) {
           account.setCookieFromString(data.cookie);
