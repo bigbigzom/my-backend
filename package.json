@@ -1,6 +1,6 @@
 {
   "name": "bilibili-comment-target-backend",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "description": "B站内容互动管理平台后端服务（GitHub Pages↔Render联通 + 网络出口池 + 设备信任登录 + 浏览器环境特征模拟）",
   "type": "module",
   "main": "src/server.js",
