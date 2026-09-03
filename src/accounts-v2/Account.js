@@ -295,27 +295,29 @@ export class Account {
   // ============================================================
   /**
    * 获取账号应使用的代理IP（粘性策略）
-   * 优先级：lastUsedProxyIp（未失效）> registeredProxyIp（未失效）> null（调用方从池分配新IP）
+   * v5.9.9 优先级：registeredProxyIp（注册IP，最优先）> lastUsedProxyIp（最后一次启动IP）> null（从池分配新IP）
    * @param {Function} isProxyReadyFn - 检查IP是否仍在可用池的函数 (proxyAddr) => boolean
    * @returns {string|null} ip:port 字符串
    */
   getStickyProxy(isProxyReadyFn) {
-    // 1. 优先用最近一次使用的IP（如果仍可用且失败次数<3）
-    if (this.lastUsedProxyIp && this.proxyIpFailCount < 3) {
+    // 1. 最优先：注册时的IP（如果仍可用）
+    if (this.registeredProxyIp) {
+      if (!isProxyReadyFn || isProxyReadyFn(this.registeredProxyIp)) {
+        if (this.lastUsedProxyIp !== this.registeredProxyIp) {
+          this.lastUsedProxyIp = this.registeredProxyIp;
+          this.proxyIpFailCount = 0;
+          this.proxyIpBoundAt = Date.now();
+        }
+        return this.registeredProxyIp;
+      }
+    }
+    // 2. 回退：最后一次启动时分配的IP（如果仍可用且失败次数<3）
+    if (this.lastUsedProxyIp && this.lastUsedProxyIp !== this.registeredProxyIp && this.proxyIpFailCount < 3) {
       if (!isProxyReadyFn || isProxyReadyFn(this.lastUsedProxyIp)) {
         return this.lastUsedProxyIp;
       }
     }
-    // 2. 回退到注册时的IP（如果仍可用）
-    if (this.registeredProxyIp && this.registeredProxyIp !== this.lastUsedProxyIp) {
-      if (!isProxyReadyFn || isProxyReadyFn(this.registeredProxyIp)) {
-        this.lastUsedProxyIp = this.registeredProxyIp;
-        this.proxyIpFailCount = 0;
-        this.proxyIpBoundAt = Date.now();
-        return this.registeredProxyIp;
-      }
-    }
-    // 3. 都不可用 → 返回null，调用方从代理池分配新IP
+    // 3. 都不可用 → 返回null，调用方从代理池分配同地区新IP
     return null;
   }
 

@@ -5,15 +5,19 @@
  * AccountCultivator 按账号实例化（非单例）。
  */
 import { AccountManagerV2, AccountCultivator, ACCOUNT_TYPE } from '../src/accounts-v2/index.js';
+import { getProxyForAccount, isProxyReady } from '../src/utils/proxy-pool.js';
 
 export class AccountService {
   constructor() {
     this.manager = new AccountManagerV2();
   }
 
-  _getCultivator(accountId) {
+  async _getCultivator(accountId) {
     const acc = this.manager.get(accountId);
     if (!acc) throw new Error('账号不存在');
+    // v5.9.9：养号前解析IP（注册IP优先→同地区回退→无则拒绝）
+    const result = await this.resolveProxy(accountId);
+    if (result.skipped) throw new Error(result.reason || '账号IP不可用，养号跳过');
     return new AccountCultivator({ account: acc, accountType: acc.accountType });
   }
 
@@ -28,6 +32,37 @@ export class AccountService {
   get(id) { return this.manager.get(id); }
   getByUid(uid) { return this.manager.getByUid(uid); }
   getStats() { return this.manager.getStats(); }
+
+  /**
+   * v5.9.9：解析账号执行任务时应使用的代理IP
+   * 优先级：注册IP > 最后一次启动IP > 同地区新IP > null（拒绝启动）
+   * @returns {Promise<{proxy:string|null, skipped:boolean, reason?:string}>}
+   */
+  async resolveProxy(accountId) {
+    const account = this.manager.get(accountId);
+    if (!account) return { proxy: null, skipped: true, reason: '账号不存在' };
+    if (!account.isActive) return { proxy: null, skipped: true, reason: '账号非活跃状态' };
+
+    // 1. 粘性IP（注册IP优先 > 最后一次IP）
+    let proxy = account.getStickyProxy((addr) => isProxyReady(addr));
+
+    // 2. 粘性IP不可用，从代理池分配同地区新IP
+    if (!proxy) {
+      const newProxy = getProxyForAccount(account);
+      if (!newProxy) {
+        return { proxy: null, skipped: true, reason: `无${account.region || '未知'}地区可用IP，账号静默等待` };
+      }
+      proxy = newProxy.proxy;
+      account.bindProxy(proxy);
+      account.proxy = proxy;
+      account.proxyCity = newProxy.city || '';
+      this.manager.update(accountId, { lastUsedProxyIp: proxy, proxy, proxyCity: account.proxyCity });
+    } else {
+      account.proxy = proxy;
+    }
+
+    return { proxy, skipped: false, region: account.region };
+  }
 
   importBatch(accounts) { return this.manager.importBatch(accounts); }
   delete(id) { return this.manager.remove(id); }
@@ -62,17 +97,18 @@ export class AccountService {
   }
 
   // ===== 养号 =====
-  getCultivationStatus(accountId) {
-    const c = this._getCultivator(accountId);
+  async getCultivationStatus(accountId) {
+    const c = await this._getCultivator(accountId);
     return c.getReport ? c.getReport() : {};
   }
 
   async dailyCultivation(accountId, opts = {}) {
-    return this._getCultivator(accountId).runDailyCultivation(opts);
+    const c = await this._getCultivator(accountId);
+    return c.runDailyCultivation(opts);
   }
 
-  advanceCultivation(accountId) {
-    const c = this._getCultivator(accountId);
+  async advanceCultivation(accountId) {
+    const c = await this._getCultivator(accountId);
     const success = c.advanceStage();
     return { success, stage: c.stage };
   }
@@ -88,8 +124,8 @@ export class AccountService {
     return { accountId, accountType: mapped };
   }
 
-  getIsolation(accountId) {
-    const c = this._getCultivator(accountId);
+  async getIsolation(accountId) {
+    const c = await this._getCultivator(accountId);
     return c.getIsolationInfo ? c.getIsolationInfo() : {};
   }
 

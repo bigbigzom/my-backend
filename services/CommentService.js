@@ -19,10 +19,18 @@ export class CommentService {
     });
   }
 
-  /** 发布评论（主账号策略） */
-  async addComment({ accountId, oid, message, type = 1, mode = COMMENT_MODE.NORMAL }) {
+  /** v5.9.9：执行任务前解析账号IP（注册IP优先→同地区回退→无则跳过） */
+  async _resolveAccount(accountId) {
     const account = this.accountService.get(accountId);
     if (!account) throw new Error('账号不存在');
+    const result = await this.accountService.resolveProxy(accountId);
+    if (result.skipped) throw new Error(result.reason || '账号IP不可用，已跳过');
+    return account;
+  }
+
+  /** 发布评论（主账号策略） */
+  async addComment({ accountId, oid, message, type = 1, mode = COMMENT_MODE.NORMAL }) {
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const commentApi = new CommentAPI(client);
     return commentApi.add({ oid, message, type, mode });
@@ -30,8 +38,7 @@ export class CommentService {
 
   /** 发布回复（子账号策略） */
   async addReply({ accountId, oid, rpid, message, type = 1 }) {
-    const account = this.accountService.get(accountId);
-    if (!account) throw new Error('账号不存在');
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const commentApi = new CommentAPI(client);
     return commentApi.reply({ oid, rpid, message, type });
@@ -39,8 +46,7 @@ export class CommentService {
 
   /** 评论操作（点赞/举报等） */
   async replyAction({ accountId, oid, rpid, action }) {
-    const account = this.accountService.get(accountId);
-    if (!account) throw new Error('账号不存在');
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const commentApi = new CommentAPI(client);
     return commentApi.action({ oid, rpid, action });
@@ -48,8 +54,7 @@ export class CommentService {
 
   /** 获取评论列表 */
   async getCommentList({ accountId, oid, type = 1, next = 0, ps = 20 }) {
-    const account = this.accountService.get(accountId);
-    if (!account) throw new Error('账号不存在');
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const commentApi = new CommentAPI(client);
     return commentApi.list({ oid, type, next, ps });
@@ -57,8 +62,7 @@ export class CommentService {
 
   /** 检测评论是否存在 */
   async checkCommentExists({ accountId, oid, rpid, message }) {
-    const account = this.accountService.get(accountId);
-    if (!account) throw new Error('账号不存在');
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const commentApi = new CommentAPI(client);
     return commentApi.checkExists({ oid, rpid, message });

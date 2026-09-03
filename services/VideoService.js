@@ -14,10 +14,17 @@ export class VideoService {
     return new BiliClient({ cookieStr: account.cookieStr, csrf: account.csrf, proxy: account.proxy });
   }
 
-  /** 获取视频信息 */
-  async getInfo({ accountId, bvid, aid }) {
+  async _resolveAccount(accountId) {
     const account = this.accountService.get(accountId);
     if (!account) throw new Error('账号不存在');
+    const result = await this.accountService.resolveProxy(accountId);
+    if (result.skipped) throw new Error(result.reason || '账号IP不可用，已跳过');
+    return account;
+  }
+
+  /** 获取视频信息 */
+  async getInfo({ accountId, bvid, aid }) {
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const videoApi = new VideoAPI(client);
     return videoApi.getInfo({ bvid, aid });
@@ -25,8 +32,7 @@ export class VideoService {
 
   /** 获取UP主视频列表 */
   async getUpperVideos({ accountId, mid, pn = 1, ps = 30, order = 'pubdate' }) {
-    const account = this.accountService.get(accountId);
-    if (!account) throw new Error('账号不存在');
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const videoApi = new VideoAPI(client);
     return videoApi.getUpperVideos({ mid, pn, ps, order });
@@ -37,8 +43,7 @@ export class VideoService {
    * 调用B站搜索API：/x/web-interface/search/type
    */
   async searchVideos({ accountId, keyword, order = 'totalrank', page = 1, pageSize = 20, duration = 0 }) {
-    const account = this.accountService.get(accountId);
-    if (!account) throw new Error('账号不存在');
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const videoApi = new VideoAPI(client);
     return videoApi.search({ keyword, order, page, pageSize, duration });
@@ -46,8 +51,7 @@ export class VideoService {
 
   /** 获取视频TAG列表 */
   async getVideoTags({ accountId, aid, bvid }) {
-    const account = this.accountService.get(accountId);
-    if (!account) throw new Error('账号不存在');
+    const account = await this._resolveAccount(accountId);
     const client = this._createClient(account);
     const videoApi = new VideoAPI(client);
     return videoApi.getTags({ aid, bvid });

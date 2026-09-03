@@ -179,6 +179,8 @@ export class TrendTrackerService {
   }
 
   async _fetchPopular(accountId, maxCount) {
+    const result = await this.accountService.resolveProxy(accountId);
+    if (result.skipped) return [];
     const account = this.accountService.get(accountId);
     const { BiliClient, VideoAPI } = await import('../src/bili-api/index.js');
     const client = new BiliClient({ cookieStr: account.cookieStr, csrf: account.csrf, proxy: account.proxy });
@@ -196,6 +198,8 @@ export class TrendTrackerService {
   }
 
   async _fetchRanking(accountId, maxCount) {
+    const result = await this.accountService.resolveProxy(accountId);
+    if (result.skipped) return [];
     const account = this.accountService.get(accountId);
     const { BiliClient, VideoAPI } = await import('../src/bili-api/index.js');
     const client = new BiliClient({ cookieStr: account.cookieStr, csrf: account.csrf, proxy: account.proxy });

@@ -67,11 +67,11 @@ export function createApiRouter(app) {
   router.post('/accounts/health', (req, res) => handle(res, () => accountService.healthCheck()));
 
   // ==================== 养号/培育 ====================
-  router.get('/cultivation/status/:accountId', (req, res) => ok(res, accountService.getCultivationStatus(req.params.accountId)));
+  router.get('/cultivation/status/:accountId', (req, res) => handle(res, () => accountService.getCultivationStatus(req.params.accountId)));
   router.post('/cultivation/daily', (req, res) => handle(res, () => accountService.dailyCultivation(req.body.accountId)));
-  router.post('/cultivation/advance', (req, res) => ok(res, accountService.advanceCultivation(req.body.accountId, req.body.stage)));
+  router.post('/cultivation/advance', (req, res) => handle(res, () => accountService.advanceCultivation(req.body.accountId, req.body.stage)));
   router.post('/cultivation/set-type', (req, res) => ok(res, accountService.setAccountType(req.body.accountId, req.body.type)));
-  router.get('/cultivation/isolation/:accountId', (req, res) => ok(res, accountService.getIsolation(req.params.accountId)));
+  router.get('/cultivation/isolation/:accountId', (req, res) => handle(res, () => accountService.getIsolation(req.params.accountId)));
 
   // 视频发布者
   router.get('/video-publisher/list', (req, res) => ok(res, accountService.listPublishers()));
