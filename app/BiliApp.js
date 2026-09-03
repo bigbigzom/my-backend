@@ -201,6 +201,7 @@ server.on('connect', (req, clientSocket, head) => {
 
 
         console.log(`[WsTunnel] 客户端连接, region=${region}`);
+        socket.setNoDelay(true);
 
         // 状态机：等待第一条文本帧（目标地址），然后建立上游连接
         let buf = Buffer.alloc(0);
@@ -248,6 +249,7 @@ server.on('connect', (req, clientSocket, head) => {
             let upstreamBytes = 0;
             upstream = net.connect(targetPort, targetHost, () => {
               targetConnected = true;
+              upstream.setNoDelay(true);
               sendFrame(JSON.stringify({ connected: true }), false);
               console.log('[WsTunnel] 直连上游已连接: ' + targetHost + ':' + targetPort);
             });
@@ -279,7 +281,7 @@ server.on('connect', (req, clientSocket, head) => {
             }
             const [ph, pp] = proxy.proxy.split(':');
             upstream = net.connect(parseInt(pp, 10), ph, () => {
-              upstream.write('CONNECT ' + targetHost + ':' + targetPort + ' HTTP/1.1\r\nHost: ' + targetHost + ':' + targetPort + '\r\n\r\n');
+              upstream.setNoDelay(true); upstream.write('CONNECT ' + targetHost + ':' + targetPort + ' HTTP/1.1\r\nHost: ' + targetHost + ':' + targetPort + '\r\n\r\n');
             });
             let established = false;
             let upBuf = Buffer.alloc(0);
