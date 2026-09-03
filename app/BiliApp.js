@@ -243,15 +243,33 @@ server.on('connect', (req, clientSocket, head) => {
 
         const connectUpstream = (targetHost, targetPort) => {
           if (region === 'direct') {
-            // v5.6 直连模式：Render服务器直接连接目标，出口IP为Render本身
+            // v5.7.2 直连模式：Render服务器直接连接目标，出口IP为Render本身
             console.log('[WsTunnel] 直连模式: Render→' + targetHost + ':' + targetPort);
+            let upstreamBytes = 0;
             upstream = net.connect(targetPort, targetHost, () => {
               targetConnected = true;
               sendFrame(JSON.stringify({ connected: true }), false);
+              console.log('[WsTunnel] 直连上游已连接: ' + targetHost + ':' + targetPort);
             });
-            upstream.on('data', (chunk) => { if (targetConnected) sendFrame(chunk, true); });
-            upstream.on('error', (e) => { console.warn('[WsTunnel] 直连上游错误:', e.message); try { socket.destroy(); } catch {} });
-            upstream.on('close', () => { try { socket.destroy(); } catch {} });
+            upstream.on('data', (chunk) => {
+              if (targetConnected) { upstreamBytes += chunk.length; sendFrame(chunk, true); }
+            });
+            upstream.on('error', (e) => {
+              console.warn('[WsTunnel] 直连上游错误 ' + targetHost + ':' + targetPort + ':', e.message);
+              if (!targetConnected) sendFrame(JSON.stringify({ error: '连接失败: ' + e.message }), false);
+              try { socket.destroy(); } catch {}
+            });
+            upstream.on('close', () => {
+              console.log('[WsTunnel] 直连上游关闭, 转发' + upstreamBytes + '字节←' + targetHost);
+              try { socket.destroy(); } catch {}
+            });
+            // 10秒连接超时
+            upstream.setTimeout(10000, () => {
+              if (!targetConnected) {
+                sendFrame(JSON.stringify({ error: '连接超时' }), false);
+                upstream.destroy();
+              }
+            });
           } else {
             const proxy = appRef.proxyService.get(region);
             if (!proxy) {
@@ -265,6 +283,7 @@ server.on('connect', (req, clientSocket, head) => {
             });
             let established = false;
             let upBuf = Buffer.alloc(0);
+            let upstreamBytes = 0;
             upstream.on('data', (chunk) => {
               if (!established) {
                 upBuf = Buffer.concat([upBuf, chunk]);
@@ -276,18 +295,20 @@ server.on('connect', (req, clientSocket, head) => {
                     targetConnected = true;
                     sendFrame(JSON.stringify({ connected: true }), false);
                     const rest = upBuf.slice(idx + 4);
-                    if (rest.length > 0) sendFrame(rest, true);
+                    if (rest.length > 0) { upstreamBytes += rest.length; sendFrame(rest, true); }
                   } else {
                     sendFrame(JSON.stringify({ error: '上游代理CONNECT失败: ' + statusLine }), false);
                     upstream.destroy();
                   }
                 }
               } else {
+                upstreamBytes += chunk.length;
                 sendFrame(chunk, true);
               }
             });
             upstream.on('error', (e) => { console.warn('[WsTunnel] 上游错误:', e.message); try { socket.destroy(); } catch {} });
-            upstream.on('close', () => { try { socket.destroy(); } catch {} });
+            upstream.on('close', () => { console.log('[WsTunnel] 上游关闭, 转发' + upstreamBytes + '字节'); try { socket.destroy(); } catch {} });
+            upstream.setTimeout(10000, () => { if (!targetConnected) { sendFrame(JSON.stringify({ error: '代理连接超时' }), false); upstream.destroy(); } });
           }
         };
         socket.on('data', (chunk) => {
