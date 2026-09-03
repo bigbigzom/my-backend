@@ -15,12 +15,12 @@ import { CN_PROXY_SOURCES } from './proxy-sources.js'; // v1.5.3：共享代理�
 // ============================================================
 // 配置
 // ============================================================
-const VALIDATE_CONCURRENCY = 30;       // 验证并发数
+const VALIDATE_CONCURRENCY = 50;       // 验证并发数（v5.4提升）
 const PROXY_TIMEOUT_MS = 8000;          // 单个代理验证超时
 const REFRESH_INTERVAL_MS = 50 * 1000;  // 刷新间隔50秒（防止Render休眠）
 const MIN_READY_POOL_SIZE = 5;           // 可用池最低水位
-const MAX_PROXIES_PER_SOURCE = 200;      // 每个源最多保留多少代理
-const MAX_TOTAL_TO_VALIDATE = 1000;      // 每次刷新最多验证多少个
+const MAX_PROXIES_PER_SOURCE = 300;      // 每个源最多保留多少代理（v5.4提升）
+const MAX_TOTAL_TO_VALIDATE = 2000;      // 每次刷新最多验证多少个（v5.4提升，多地区需要更多IP）
 const PROXY_EXPIRE_MS = 30 * 60 * 1000;  // IP新鲜度阈值（超过则惰性重验证，不立即移除）
 
 // 支持的地区（只有IP数量多的国家才计入）
@@ -33,6 +33,7 @@ export const SUPPORTED_REGIONS = {
   JP: { name: '日本', code: 'JP', languages: ['ja-JP', 'ja', 'en'], timezone: 'Asia/Tokyo' },
   HK: { name: '香港', code: 'HK', languages: ['zh-HK', 'zh-TW', 'zh', 'en'], timezone: 'Asia/Hong_Kong' },
   CN: { name: '中国', code: 'CN', languages: ['zh-CN', 'zh', 'en'], timezone: 'Asia/Shanghai' },
+  RU: { name: '俄罗斯', code: 'RU', languages: ['ru-RU', 'ru', 'en'], timezone: 'Europe/Moscow' },
 };
 const SUPPORTED_COUNTRY_CODES = new Set(Object.keys(SUPPORTED_REGIONS));
 // 国家代码到地区的映射（处理特殊情况）

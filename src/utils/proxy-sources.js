@@ -301,6 +301,89 @@ export const CN_PROXY_SOURCES = [
     getUrl: () => 'https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/http_proxies.txt',
     pages: 1,
   },
+
+  // ============================================================
+  // F. v5.4 新增：Render海外可直连的高可靠代理源（10个）
+  // 所有源均为 GitHub raw / jsDelivr CDN / 专用API，Render美国节点可直接访问
+  // ============================================================
+  {
+    // 48万+ HTTP代理，每小时更新，GitHub wiki raw
+    name: 'gfpcom-http(48万+)',
+    getUrl: () => 'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/http.txt',
+    pages: 1,
+  },
+  {
+    // 44万+ HTTPS代理，每小时更新
+    name: 'gfpcom-https(44万+)',
+    getUrl: () => 'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/https.txt',
+    pages: 1,
+  },
+  {
+    // ProxyScrape官方GitHub，jsDelivr CDN镜像（无速率限制），每分钟重验
+    name: 'ProxyScrape-cdn-all',
+    getUrl: () => 'https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/all/data.txt',
+    pages: 1,
+  },
+  {
+    // ProxyScrape HTTP分类
+    name: 'ProxyScrape-cdn-http',
+    getUrl: () => 'https://cdn.jsdelivr.net/gh/proxyscrape/free-proxy-list@main/proxies/http/data.txt',
+    pages: 1,
+  },
+  {
+    // databay.com 官方热链，5分钟刷新，CORS开放，专门为程序调用设计
+    name: 'databay-all(5min刷新)',
+    getUrl: () => 'https://databay.com/free-proxy-list.txt',
+    pages: 1,
+  },
+  {
+    // databay HTTP分类
+    name: 'databay-http',
+    getUrl: () => 'https://databay.com/free-proxy-list/http.txt',
+    pages: 1,
+  },
+  {
+    // 78万+代理，GitHub raw，持续刷新，jsDelivr镜像备选
+    name: 'hproxy-http(78万+)',
+    getUrl: () => 'https://raw.githubusercontent.com/hproxy-com/free-proxy-list/main/http.txt',
+    pages: 1,
+  },
+  {
+    // hproxy all.txt（含所有协议）
+    name: 'hproxy-all',
+    getUrl: () => 'https://raw.githubusercontent.com/hproxy-com/free-proxy-list/main/all.txt',
+    pages: 1,
+  },
+  {
+    // proxy-list.download API，按协议类型批量下载
+    name: 'proxy-list-download-http',
+    getUrl: () => 'https://www.proxy-list.download/api/v1/get?type=http',
+    pages: 1,
+  },
+  {
+    // proxy-list.download HTTPS
+    name: 'proxy-list-download-https',
+    getUrl: () => 'https://www.proxy-list.download/api/v1/get?type=https',
+    pages: 1,
+  },
+  {
+    // dpangestuw/Free-Proxy，GitHub raw，定期更新
+    name: 'dpangestuw-http',
+    getUrl: () => 'https://raw.githubusercontent.com/dpangestuw/Free-Proxy/refs/heads/main/http_proxies.txt',
+    pages: 1,
+  },
+  {
+    // TheSpeedX jsDelivr CDN镜像（防止GitHub raw被限流）
+    name: 'TheSpeedX-cdn(http)',
+    getUrl: () => 'https://cdn.jsdelivr.net/gh/TheSpeedX/PROXY-List@master/http.txt',
+    pages: 1,
+  },
+  {
+    // monosans jsDelivr CDN镜像
+    name: 'monosans-cdn(http)',
+    getUrl: () => 'https://cdn.jsdelivr.net/gh/monosans/proxy-list@main/proxies/http.txt',
+    pages: 1,
+  },
 ];
 
 // v5.0：统一导出为 PROXY_SOURCES（包含中国+国际源，验证时自动按地区分类）
