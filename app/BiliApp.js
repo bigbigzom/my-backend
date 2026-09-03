@@ -242,46 +242,54 @@ server.on('connect', (req, clientSocket, head) => {
         };
 
         const connectUpstream = (targetHost, targetPort) => {
-          const proxy = appRef.proxyService.get(region);
-          if (!proxy) {
-            sendFrame(JSON.stringify({ error: `无${region}地区可用IP` }), false);
-            socket.destroy();
-            return;
-          }
-          const [ph, pp] = proxy.proxy.split(':');
-          upstream = net.connect(parseInt(pp, 10), ph, () => {
-            upstream.write(`CONNECT ${targetHost}:${targetPort} HTTP/1.1
-Host: ${targetHost}:${targetPort}
-
-`);
-          });
-          let established = false;
-          let upBuf = Buffer.alloc(0);
-          upstream.on('data', (chunk) => {
-            if (!established) {
-              upBuf = Buffer.concat([upBuf, chunk]);
-              const idx = upBuf.indexOf('\r\n\r\n');
-              if (idx >= 0) {
-                const statusLine = upBuf.slice(0, idx).toString().split('\r\n')[0];
-                if (statusLine.includes(' 200 ')) {
-                  established = true;
-                  targetConnected = true;
-                  sendFrame(JSON.stringify({ connected: true }), false);
-                  const rest = upBuf.slice(idx + 4);
-                  if (rest.length > 0) sendFrame(rest, true);
-                } else {
-                  sendFrame(JSON.stringify({ error: '上游代理CONNECT失败: ' + statusLine }), false);
-                  upstream.destroy();
-                }
-              }
-            } else {
-              sendFrame(chunk, true);
+          if (region === 'direct') {
+            // v5.6 直连模式：Render服务器直接连接目标，出口IP为Render本身
+            console.log('[WsTunnel] 直连模式: Render→' + targetHost + ':' + targetPort);
+            upstream = net.connect(targetPort, targetHost, () => {
+              targetConnected = true;
+              sendFrame(JSON.stringify({ connected: true }), false);
+            });
+            upstream.on('data', (chunk) => { if (targetConnected) sendFrame(chunk, true); });
+            upstream.on('error', (e) => { console.warn('[WsTunnel] 直连上游错误:', e.message); try { socket.destroy(); } catch {} });
+            upstream.on('close', () => { try { socket.destroy(); } catch {} });
+          } else {
+            const proxy = appRef.proxyService.get(region);
+            if (!proxy) {
+              sendFrame(JSON.stringify({ error: '无' + region + '地区可用IP' }), false);
+              socket.destroy();
+              return;
             }
-          });
-          upstream.on('error', (e) => { console.warn('[WsTunnel] 上游错误:', e.message); try { socket.destroy(); } catch {} });
-          upstream.on('close', () => { try { socket.destroy(); } catch {} });
+            const [ph, pp] = proxy.proxy.split(':');
+            upstream = net.connect(parseInt(pp, 10), ph, () => {
+              upstream.write('CONNECT ' + targetHost + ':' + targetPort + ' HTTP/1.1\r\nHost: ' + targetHost + ':' + targetPort + '\r\n\r\n');
+            });
+            let established = false;
+            let upBuf = Buffer.alloc(0);
+            upstream.on('data', (chunk) => {
+              if (!established) {
+                upBuf = Buffer.concat([upBuf, chunk]);
+                const idx = upBuf.indexOf('\r\n\r\n');
+                if (idx >= 0) {
+                  const statusLine = upBuf.slice(0, idx).toString().split('\r\n')[0];
+                  if (statusLine.includes(' 200 ')) {
+                    established = true;
+                    targetConnected = true;
+                    sendFrame(JSON.stringify({ connected: true }), false);
+                    const rest = upBuf.slice(idx + 4);
+                    if (rest.length > 0) sendFrame(rest, true);
+                  } else {
+                    sendFrame(JSON.stringify({ error: '上游代理CONNECT失败: ' + statusLine }), false);
+                    upstream.destroy();
+                  }
+                }
+              } else {
+                sendFrame(chunk, true);
+              }
+            });
+            upstream.on('error', (e) => { console.warn('[WsTunnel] 上游错误:', e.message); try { socket.destroy(); } catch {} });
+            upstream.on('close', () => { try { socket.destroy(); } catch {} });
+          }
         };
-
         socket.on('data', (chunk) => {
           buf = Buffer.concat([buf, chunk]);
           let frame;
