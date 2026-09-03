@@ -94,6 +94,78 @@ export function createApiRouter(app) {
     return { valid: !!(account && account.cookieStr), account };
   }));
 
+  // ==================== v5.9 双通道验证：Render远程验证 ====================
+  // 本地登录采集关闭浏览器时，将cookies+注册IP发送到此端点
+  // Render用注册IP访问nav接口验证，验证通过则直接保存账号
+  router.post('/auth/verify', (req, res) => handle(res, async () => {
+    const { cookies, phone, remark, region, registeredProxyIp, userAgent, deviceProfile, refreshToken, localStorage } = req.body;
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      return { valid: false, error: '无cookies数据' };
+    }
+
+    // 构造cookie字符串
+    const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+    const csrf = cookies.find(c => c.name === 'bili_jct')?.value || '';
+    const uid = cookies.find(c => c.name === 'DedeUserID')?.value || '';
+
+    if (!cookieStr.includes('SESSDATA=') || !csrf) {
+      return { valid: false, error: '缺少SESSDATA或bili_jct' };
+    }
+
+    // 用注册IP验证（通过BiliClient + ProxyAgent）
+    const { BiliClient } = await import('../src/bili-api/BiliClient.js');
+    const client = new BiliClient({
+      cookieStr,
+      csrf,
+      proxy: registeredProxyIp || undefined,  // 使用注册时的IP
+      deviceProfile: deviceProfile || undefined,
+    });
+
+    try {
+      const result = await client.get('/x/web-interface/nav');
+      if (result.ok && result.data?.data?.isLogin) {
+        const navData = result.data.data;
+        const finalUid = uid || String(navData.mid || '');
+        const username = navData.uname || '';
+
+        // 验证通过，直接保存账号
+        const accountData = {
+          type: 'cookie',
+          username: finalUid ? `user_${finalUid}` : `user_${Date.now()}`,
+          phone: phone || '',
+          remark: remark || '',
+          cookieStr,
+          csrf,
+          refreshToken: refreshToken || '',
+          acTimeValue: refreshToken || '',
+          region: region || 'CN',
+          registeredProxyIp: registeredProxyIp || '',
+          userAgent: userAgent || '',
+          deviceProfile: deviceProfile || null,
+          localStorage: localStorage || {},
+          trustedDevice: true,
+          canRefresh: !!refreshToken,
+        };
+        const imported = accountService.importBatch([accountData]);
+
+        return {
+          valid: true,
+          uid: finalUid,
+          username,
+          avatar: navData.face || '',
+          vipStatus: navData.vipStatus || 0,
+          imported: imported > 0,
+          message: '验证通过并已保存',
+        };
+      }
+      return { valid: false, error: result.data?.message || 'nav返回未登录', code: result.data?.code };
+    } catch (e) {
+      return { valid: false, error: e.message };
+    } finally {
+      try { client.close(); } catch {}
+    }
+  }));
+
   // ==================== 监控引擎 ====================
   router.get('/monitor/tasks', (req, res) => ok(res, monitorService.list()));
   router.post('/monitor/tasks', (req, res) => ok(res, monitorService.add(req.body)));
