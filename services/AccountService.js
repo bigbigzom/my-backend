@@ -29,7 +29,11 @@ export class AccountService {
     return accounts.map(a => a.toDisplay ? a.toDisplay() : a);
   }
 
-  get(id) { return this.manager.get(id); }
+  get(id) {
+    // v6.0：兼容前端 cloud_ 前缀
+    const cleanId = String(id || '').replace(/^cloud_/, '');
+    return this.manager.get(cleanId) || this.manager.getByUid(cleanId) || null;
+  }
   getByUid(uid) { return this.manager.getByUid(uid); }
   getStats() { return this.manager.getStats(); }
 

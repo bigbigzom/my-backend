@@ -87,37 +87,56 @@ function extractProxies(text) {
 // 抓取阶段
 // ============================================================
 async function fetchSourcePage(src, page) {
+  const url = src.getUrl(page);
+  // 第一轮：直连
   try {
-    const url = src.getUrl(page);
-    const res = await fetch(url, {
-      headers: DEFAULT_HEADERS,
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) {
-      console.warn(`[ProxyPool] ${src.name} 返回 ${res.status}`);
-      return [];
+    const found = await _fetchAndParse(url, src, null);
+    if (found.length > 0) {
+      console.log(`[ProxyPool] ${src.name} 直连抓取到 ${found.length} 个代理`);
+      return found;
     }
-    let found = [];
-    if (src.isJson) {
-      try {
-        const json = await res.json();
-        if (json.data && Array.isArray(json.data)) {
-          found = json.data.map((item) => `${item.ip}:${item.port}`).filter(Boolean);
-        }
-      } catch (e) {
-        console.warn(`[ProxyPool] ${src.name} JSON 解析失败: ${e.message}`);
-      }
-    } else {
-      const text = await res.text();
-      found = extractProxies(text);
-    }
-    found = found.slice(0, MAX_PROXIES_PER_SOURCE);
-    console.log(`[ProxyPool] ${src.name} 抓取到 ${found.length} 个代理`);
-    return found;
   } catch (err) {
-    console.warn(`[ProxyPool] ${src.name} 抓取失败: ${err.message}`);
-    return [];
+    console.warn(`[ProxyPool] ${src.name} 直连失败: ${err.message}，尝试代理链式访问...`);
   }
+  // 第二轮：用已有代理IP链式访问（优先CN→US→RU→其他）
+  const regionOrder = ['CN', 'US', 'RU', 'GB', 'DE', 'FR', 'JP', 'HK', 'CA'];
+  for (const region of regionOrder) {
+    const proxy = getProxy(region);
+    if (!proxy) continue;
+    try {
+      const found = await _fetchAndParse(url, src, proxy.proxy);
+      if (found.length > 0) {
+        console.log(`[ProxyPool] ${src.name} 经${region}代理 ${proxy.proxy} 抓取到 ${found.length} 个代理`);
+        return found;
+      }
+    } catch (err) {
+      console.warn(`[ProxyPool] ${src.name} 经${region}代理失败: ${err.message}`);
+    }
+  }
+  console.warn(`[ProxyPool] ${src.name} 所有方式均失败，跳过`);
+  return [];
+}
+
+/** 内部：抓取并解析代理源页面，支持可选代理 */
+async function _fetchAndParse(url, src, proxyAddr) {
+  const opts = { headers: DEFAULT_HEADERS, signal: AbortSignal.timeout(15000) };
+  if (proxyAddr) {
+    const p = proxyAddr.includes('://') ? proxyAddr : 'http://' + proxyAddr;
+    opts.dispatcher = new ProxyAgent(p);
+  }
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  let found = [];
+  if (src.isJson) {
+    const json = await res.json();
+    if (json.data && Array.isArray(json.data)) {
+      found = json.data.map((item) => `${item.ip}:${item.port}`).filter(Boolean);
+    }
+  } else {
+    const text = await res.text();
+    found = extractProxies(text);
+  }
+  return found.slice(0, MAX_PROXIES_PER_SOURCE);
 }
 
 async function fetchAllSources() {
