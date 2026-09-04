@@ -12,8 +12,8 @@
  *
  * 设计：纯诊断，不修改账号状态。所有步骤独立try-catch，确保输出完整报告。
  */
-import { BiliAuthAPI } from '../accounts-v2/BiliAuthAPI.js';
-import { getProxyForAccount, isProxyReady } from '../utils/proxy-pool.js';
+import { BiliAuthAPI } from '../src/accounts-v2/BiliAuthAPI.js';
+import { getProxyForAccount, isProxyReady } from '../src/utils/proxy-pool.js';
 
 export class AccountDiagnosticService {
   constructor({ accountService }) {
