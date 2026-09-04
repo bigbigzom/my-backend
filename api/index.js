@@ -134,14 +134,17 @@ export function createApiRouter(app) {
         // 验证通过，直接保存账号
         const accountData = {
           type: 'cookie',
+          id: finalUid || String(Date.now()),
+          uid: finalUid || '',
           username: finalUid ? `user_${finalUid}` : `user_${Date.now()}`,
           phone: phone || '',
           remark: remark || '',
-          cookieStr,
+          cookie: cookieStr,
           csrf,
           refreshToken: refreshToken || '',
           acTimeValue: refreshToken || '',
           region: region || 'CN',
+          status: 'active',
           registeredProxyIp: registeredProxyIp || '',
           userAgent: userAgent || '',
           deviceProfile: deviceProfile || null,

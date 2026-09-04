@@ -67,6 +67,8 @@ export class TrendTrackerService {
   async discoverHotTags({ accountId, keyword, sampleSize = 50 }) {
     const account = this.accountService.get(accountId);
     if (!account) throw new Error('账号不存在');
+    const r = await this.accountService.resolveProxy(accountId);
+    if (r.skipped) throw new Error(r.reason || '账号IP不可用');
 
     // 搜索多页获取样本
     const allVideos = [];
@@ -119,6 +121,8 @@ export class TrendTrackerService {
     const { accountId, keyword, mode = 'keyword', order = 'totalrank', timeRange = 0, maxCount = 50, minPlayCount = 0 } = opts;
     const account = this.accountService.get(accountId);
     if (!account) throw new Error('账号不存在');
+    const r = await this.accountService.resolveProxy(accountId);
+    if (r.skipped) throw new Error(r.reason || '账号IP不可用');
 
     const taskId = `trend_${Date.now()}`;
     const task = {
@@ -183,7 +187,7 @@ export class TrendTrackerService {
     if (result.skipped) return [];
     const account = this.accountService.get(accountId);
     const { BiliClient, VideoAPI } = await import('../src/bili-api/index.js');
-    const client = new BiliClient({ cookieStr: account.cookieStr, csrf: account.csrf, proxy: account.proxy });
+    const client = new BiliClient({ cookieStr: account.cookieStr, csrf: account.csrf, proxy: account.proxy, userAgent: account.userAgent || undefined, deviceProfile: account.deviceProfile || account.deviceEnv || null });
     const videoApi = new VideoAPI(client);
     const all = [];
     const pages = Math.ceil(maxCount / 20);
@@ -202,7 +206,7 @@ export class TrendTrackerService {
     if (result.skipped) return [];
     const account = this.accountService.get(accountId);
     const { BiliClient, VideoAPI } = await import('../src/bili-api/index.js');
-    const client = new BiliClient({ cookieStr: account.cookieStr, csrf: account.csrf, proxy: account.proxy });
+    const client = new BiliClient({ cookieStr: account.cookieStr, csrf: account.csrf, proxy: account.proxy, userAgent: account.userAgent || undefined, deviceProfile: account.deviceProfile || account.deviceEnv || null });
     const videoApi = new VideoAPI(client);
     const list = await videoApi.getRanking({ rid: 0, type: 'all' });
     return list.slice(0, maxCount);

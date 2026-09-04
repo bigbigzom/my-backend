@@ -13,7 +13,7 @@ export class AccountService {
   }
 
   async _getCultivator(accountId) {
-    const acc = this.manager.get(accountId);
+    const acc = this.get(accountId);
     if (!acc) throw new Error('账号不存在');
     // v5.9.9：养号前解析IP（注册IP优先→同地区回退→无则拒绝）
     const result = await this.resolveProxy(accountId);
