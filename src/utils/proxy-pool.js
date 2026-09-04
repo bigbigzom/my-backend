@@ -93,6 +93,9 @@ function _savePool() {
 
 function _loadPool() {
   try {
+    if (!fs.existsSync(PROXY_STORAGE_PATH)) return;
+    const raw = fs.readFileSync(PROXY_STORAGE_PATH, 'utf-8');
+    const data = JSON.parse(raw);
     if (Array.isArray(data.readyPool)) {
       readyPool = data.readyPool.map(p => ({ ...p, failCount: 0, inUseBy: null }));
       console.log(`[ProxyPool] 从持久化恢复 ${readyPool.length} 个代理`);
@@ -548,10 +551,15 @@ export function getProxyPoolStats() {
 
 /** 启动定时刷新（默认50秒，防止Render休眠） */
 export function startProxyPool(intervalMs = REFRESH_INTERVAL_MS) {
-  refreshProxyPool();
+  // v6.2：启动时不立即刷新（避免Render免费层启动时资源耗尽导致部署超时）
+  // 先从持久化文件恢复IP，延迟10秒后再在后台异步刷新
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(refreshProxyPool, intervalMs);
-  console.log(`[ProxyPool] 定时刷新已启动，间隔 ${intervalMs / 1000} 秒`);
+  console.log(`[ProxyPool] 定时刷新已启动，间隔 ${intervalMs / 1000} 秒（已从持久化恢复 ${readyPool.length} 个IP，10秒后后台刷新）`);
+  // 延迟刷新，确保服务先启动并响应健康检查
+  setTimeout(() => {
+    refreshProxyPool().catch(e => console.warn('[ProxyPool] 后台刷新失败:', e.message));
+  }, 10000);
 }
 
 /** 停止定时刷新 */
