@@ -43,7 +43,7 @@ export class AccountService {
    * @returns {Promise<{proxy:string|null, skipped:boolean, reason?:string}>}
    */
   async resolveProxy(accountId) {
-    const account = this.manager.get(accountId);
+    const account = this.get(accountId);
     if (!account) return { proxy: null, skipped: true, reason: '账号不存在' };
     if (!account.isActive) return { proxy: null, skipped: true, reason: '账号非活跃状态' };
 
@@ -69,12 +69,15 @@ export class AccountService {
   }
 
   importBatch(accounts) { return this.manager.importBatch(accounts); }
-  delete(id) { return this.manager.remove(id); }
+  delete(id) {
+    const cleanId = String(id || '').replace(/^cloud_/, '');
+    return this.manager.remove(cleanId) || this.manager.removeByUid(cleanId);
+  }
   update(id, patch) { return this.manager.update(id, patch); }
 
   // ===== 账号健康 =====
   async refresh(id) {
-    const acc = this.manager.get(id);
+    const acc = this.get(id);
     if (!acc) throw new Error('账号不存在');
     return this.manager.refreshAccount ? await this.manager.refreshAccount(id) : { id, refreshed: true };
   }

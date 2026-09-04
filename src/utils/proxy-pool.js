@@ -10,6 +10,10 @@
  * 依赖：undici（ProxyAgent 支持 HTTPS over HTTP proxy）
  */
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { CN_PROXY_SOURCES } from './proxy-sources.js'; // v1.5.3：共享代理源配置（20+ 中国IP源，与本地登录服务一致）
 
 // ============================================================
@@ -21,7 +25,9 @@ const REFRESH_INTERVAL_MS = 50 * 1000;  // 刷新间隔50秒（防止Render休�
 const MIN_READY_POOL_SIZE = 5;           // 可用池最低水位
 const MAX_PROXIES_PER_SOURCE = 300;      // 每个源最多保留多少代理（v5.4提升）
 const MAX_TOTAL_TO_VALIDATE = 2000;      // 每次刷新最多验证多少个（v5.4提升，多地区需要更多IP）
-const PROXY_EXPIRE_MS = 30 * 60 * 1000;  // IP新鲜度阈值（超过则惰性重验证，不立即移除）
+const PROXY_EXPIRE_MS = 30 * 60 * 1000;  // IP新鲜度阈值
+// v6.0：代理池独立持久化路径（与账号数据完全分离，删除账号不影响代理池）
+const PROXY_STORAGE_PATH = path.join(__dirname, "..", "..", "data", "proxy-pool.json");
 
 // 支持的地区（只有IP数量多的国家才计入）
 export const SUPPORTED_REGIONS = {
@@ -69,6 +75,32 @@ let totalValidatedThisRound = 0;
 // IP 占用表（防止多账号同一时刻共用同一IP = 团伙信号）
 // proxyAddr -> accountKey
 const proxyOccupancy = new Map();
+
+// ============================================================
+// v6.0 独立持久化（代理池数据与账号数据完全分离）
+// ============================================================
+function _savePool() {
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const data = {
+      version: '1.0',
+      savedAt: Date.now(),
+      readyPool: readyPool.map(p => ({ proxy: p.proxy, region: p.region, city: p.city || '', speed: p.speed || 0, lastChecked: p.lastChecked || 0 })),
+      count: readyPool.length,
+    };
+  } catch (e) { console.warn('[ProxyPool] 持久化失败:', e.message); }
+}
+
+function _loadPool() {
+  try {
+    if (Array.isArray(data.readyPool)) {
+      readyPool = data.readyPool.map(p => ({ ...p, failCount: 0, inUseBy: null }));
+      console.log(`[ProxyPool] 从持久化恢复 ${readyPool.length} 个代理`);
+    }
+  } catch (e) { console.warn('[ProxyPool] 加载持久化失败:', e.message); }
+}
+// 启动时加载
+_loadPool();
 
 // ============================================================
 // 工具函数
@@ -283,6 +315,7 @@ export async function refreshProxyPool() {
     lastRefreshAt = Date.now();
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[ProxyPool] 刷新完成：可用 ${readyPool.length} 个，耗时 ${elapsed}s`);
+    _savePool(); // v6.0：独立持久化
     if (readyPool.length > 0) {
       console.log(`[ProxyPool] 最快代理: ${readyPool[0].proxy} (${readyPool[0].speed}ms)`);
     }

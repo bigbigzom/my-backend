@@ -18,6 +18,7 @@ import crypto from 'crypto';
 import net from 'net';
 import { AppConfig } from '../config/AppConfig.js';
 import { AccountService } from '../services/AccountService.js';
+import { AccountDiagnosticService } from '../services/AccountDiagnosticService.js';
 import { CommentService } from '../services/CommentService.js';
 import { VideoService } from '../services/VideoService.js';
 import { MonitorService } from '../services/MonitorService.js';
@@ -40,6 +41,7 @@ export class BiliApp {
 
     // 基础Service（无依赖）
     this.accountService = new AccountService();
+    this.accountDiagnosticService = new AccountDiagnosticService({ accountService: this.accountService });
     this.proxyService = new ProxyService();
     this.contentService = new ContentService();
     this.riskService = new RiskService();

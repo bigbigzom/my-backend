@@ -142,6 +142,13 @@ export class AccountManagerV2 extends EventEmitter {
     return true;
   }
 
+  /** 通过UID删除账号 */
+  removeByUid(uid) {
+    const account = this.getByUid(uid);
+    if (!account) return false;
+    return this.remove(account.id);
+  }
+
   /** 获取所有账号 */
   getAll() {
     return Array.from(this.accounts.values());
@@ -434,7 +441,8 @@ export class AccountManagerV2 extends EventEmitter {
    * @param {string} id
    */
   async verifyLogin(id) {
-    const account = this.accounts.get(id);
+    const cleanId = String(id || '').replace(/^cloud_/, '');
+    const account = this.accounts.get(cleanId) || this.getByUid(cleanId);
     if (!account) return { valid: false, error: '账号不存在' };
     if (!account.hasCredentials) return { valid: false, error: '没有凭证' };
 

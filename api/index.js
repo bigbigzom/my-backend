@@ -46,6 +46,9 @@ export function createApiRouter(app) {
   router.get('/v2/usage-policies', (req, res) => ok(res, accountService.listUsagePolicies()));
   router.post('/v2/accounts/:id/warmup/reset', (req, res) => ok(res, accountService.resetWarmup(req.params.id)));
   router.post('/v2/accounts/refresh-due', (req, res) => handle(res, () => accountService.refreshDue()));
+  // v6.0：账号详细诊断（前置检测，输出详细日志）
+  router.post('/v2/accounts/:id/diagnose', (req, res) => handle(res, () => app.accountDiagnosticService.diagnose(req.params.id)));
+  router.post('/v2/accounts/batch-diagnose', (req, res) => handle(res, () => app.accountDiagnosticService.batchDiagnose(req.body.ids || [])));
   router.put('/accounts/:id/active-hours', (req, res) => ok(res, accountService.setActiveHours(req.params.id, req.body.hours)));
   router.put('/accounts/:id/ip-role', (req, res) => ok(res, accountService.setIpRole(req.params.id, req.body.role)));
   router.put('/accounts/:id/social-separation', (req, res) => ok(res, accountService.setSocialSeparation(req.params.id, req.body.enabled)));
